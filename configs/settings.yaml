@@ -1,0 +1,20 @@
+#settings.yaml
+# Path: settings.yaml
+
+# General
+npop: 50
+maxgens: 100
+elitism: False
+steady_state: False
+
+# Operators
+crossover_rate: 0.8
+mutation_rate: 0.1
+reproduction_rate: 0.1
+
+# Selection
+tournament_rate: 0.2
+rank_rate: 0.6
+roulette_rate: 0.2
+
+tournament_size: 0.07
