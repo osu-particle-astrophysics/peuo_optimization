@@ -5,7 +5,7 @@ import pickle
 import copy
 from pathlib import Path
 
-import horn_antenna
+from horn_antenna import horn_antenna
 #import bicone_antenna
 #import hpol_antenna
 
@@ -15,10 +15,11 @@ class GA:
         self.initialize_settings(settingsfile)
         self.generation = 0
         self.population = []
-        self.best_individual = []
+        self.best_individual = None
         self.best_fitness = 0.0
         self.comparison = np.array([])
         self.load_compairson()
+        self.make_run_directory()
     
     
     ### Initialization ########################################################
@@ -66,7 +67,7 @@ class GA:
         '''Initializes the population of horn antennas'''
         antenna_type = self.settings['a_type']
         if initialization is None:
-            for i in range(self.settings.population_size):
+            for i in range(self.settings["npop"]):
                 self.population.append(self.make_antenna(antenna_type))
                 self.population[i].initialize()
         else:
@@ -78,13 +79,19 @@ class GA:
         '''Loads the comparison genes from the comparison file'''
         comparison_path = Path(f"comparisons/{self.settings['comparison_file']}")
         if comparison_path.exists():
-            comparison = np.loadtxt(comparison_path)
+            self.comparison = np.loadtxt(comparison_path)
         else:
             print('Comparison file not found. Exiting.')
             exit(1)
-        
-        self.comparison = comparison
-        
+    
+    
+    def make_run_directory(self):
+        '''Creates the run directory for the current run'''
+        run_directory = Path("RunData") / self.run_name
+        run_directory.mkdir(parents=True, exist_ok=True)
+        tracker_path = run_directory / "tracker.csv"
+        with open(tracker_path, 'w') as file:
+            file.write("Generation,Best Fitness,Best Individual Genes\n")
     
     ### Selection ############################################################
     
@@ -92,7 +99,10 @@ class GA:
         '''selects a parent using tournament selection'''
         
         # Select tournamentsize of the population
-        tournament = random.sample(self.population, self.settings.tournament_size)
+        
+        tournament_count = int(self.settings["tournament_size"] * self.settings["npop"])
+        
+        tournament = random.sample(self.population, tournament_count)
         
         # Find the best individual in the tournament
         best_individual = tournament[0]
@@ -145,9 +155,9 @@ class GA:
         
         for i in range(num_parents):
             selection = random.uniform(0, 1)
-            if selection < self.settings.tournament_rate:
+            if selection < self.settings["tournament_rate"]:
                 parents.append(self.tournament_selection())
-            elif selection < self.settings.tournament_rate + self.settings.roulette_rate:
+            elif selection < self.settings["tournament_rate"] + self.settings["roulette_rate"]:
                 parents.append(self.roulette_selection())
             else:
                 parents.append(self.rank_selection())
@@ -158,8 +168,8 @@ class GA:
     def absolute_selection(self, num_parents):
         '''Selects exactly the rate from each selection method'''
         
-        no_tournament = int(num_parents * self.settings.tournament_rate)
-        no_roulette = int(num_parents * self.settings.roulette_rate)
+        no_tournament = int(num_parents * self.settings["tournament_rate"])
+        no_roulette = int(num_parents * self.settings["roulette_rate"])
         no_rank = num_parents - no_tournament - no_roulette
         
         parents = []
@@ -182,7 +192,7 @@ class GA:
             child2_genes = []
             
             # Crossover genes
-            for gene in parent1.genes:
+            for gene in range(len(parent1.genes)):
                 gene_1 = parent1.genes[gene]
                 gene_2 = parent2.genes[gene]
                 
@@ -206,8 +216,8 @@ class GA:
         
         valid_antenna = False
         while not valid_antenna:
-            new_gene = random.gauss(chosen_gene, chosen_gene * self.settings.sigma)
-            individual.genes[chosen_gene] = new_gene
+            new_gene = random.gauss(chosen_gene, chosen_gene * self.settings["sigma"])
+            individual.genes[chosen_gene_index] = new_gene
             valid_antenna = individual.check_genes()
         
         return individual
@@ -264,7 +274,7 @@ class GA:
         '''append the current best to the tracker file'''
         filepath = Path("RunData") / self.run_name / "tracker.csv"
         with open(filepath, 'a') as file:
-            file.write(f"{self.generation},{self.best_fitness},{self.best_individual.id}\n")
+            file.write(f"{self.generation},{self.best_fitness},{self.best_individual.genes}\n")
     
     
     ### Generational Methods #################################################
@@ -273,6 +283,9 @@ class GA:
         ''' Evaluate the fitness of the entire population'''
         for individual in self.population:
             individual.evaluate_fitness(self.comparison)
+            if individual.fitness > self.best_fitness:
+                self.best_fitness = individual.fitness
+                self.best_individual = individual
     
     
     
@@ -319,7 +332,7 @@ class GA:
         return new_indiv
     
     
-    def get_num_parents(operator):
+    def get_num_parents(self, operator):
         '''get the number of parents for a SSGA operator'''
         if operator == "crossover":
             return 2
@@ -402,6 +415,10 @@ class GA:
             new_indiv.evaluate_fitness(self.comparison)
             self.replace_individual(new_indiv)
             
+            if new_indiv.fitness > self.best_fitness:
+                self.best_fitness = new_indiv.fitness
+                self.best_individual = new_indiv
+            
         # Save the data
         self.save_population()
         self.write_population_genes()
@@ -413,8 +430,10 @@ class GA:
         pass
         
         
-        
-        
+    def print_stats(self):
+        print(f"Generation: {self.generation}")
+        print(f"Best Fitness: {self.best_fitness}")
+        print(f"Best Individual: {self.best_individual.genes}")
         
         
         

@@ -1,9 +1,10 @@
 import random
+import numpy as np
+from pathlib import Path
 
 class horn_antenna:
     
     def __init__(self, genes=None):
-        self.id = ""
         self.genes = genes
         self.fitness = 0.0
         self.true_fitness = 0.0
@@ -30,12 +31,13 @@ class horn_antenna:
             trpzd_length = random.uniform(0.0, y_0)
             trpzd_height = random.uniform(0.0, x_0)
             
+            self.genes = [side_length, height, 
+                          x_0, y_0, z_f, y_f, 
+                          beta, trpzd_length, 
+                          trpzd_height]
+            
             valid_design = self.check_genes()
         
-        self.genes = [side_length, height, 
-                      x_0, y_0, z_f, y_f, 
-                      beta, trpzd_length, 
-                      trpzd_height]
         
     
     def check_genes(self):
@@ -94,9 +96,10 @@ class horn_antenna:
         self.fitness = 1.0 - normalized_distance
     
     
-    def set_id(self, id):
-        '''Sets the id of the antenna'''
-        self.id = id
+    def save_as_comparison(self, filename):
+        '''save the current genes as a comparison file'''
+        filepath = Path(f"comparisons/{filename}.txt")
+        np.savetxt(filepath, self.genes)
     
     
     def __str__(self) -> str:

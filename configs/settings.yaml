@@ -3,24 +3,24 @@
 
 # General
 a_type: "horn" # Antenna Type, Horn, Bicone, ...
-npop: 50
+npop: 250
 maxgens: 100
 elitism: False
-steady_state: False
+steady_state: True
 replacement_method: "random" # Random, Tournament, Elite
-forced_diversity: False
-comparison_file: "comparison.csv"
+forced_diversity: True
+comparison_file: "comparison1.txt"
 
 # Operators
 crossover_rate: 0.8
-mutation_rate: 0.1
-reproduction_rate: 0.1
+mutation_rate: 0.15
+reproduction_rate: 0.0
 
 sigma: 0.06
 
 # Selection
-tournament_rate: 0.2
-rank_rate: 0.6
-roulette_rate: 0.2
+tournament_rate: 1.0
+rank_rate: 0.0
+roulette_rate: 0.0
 
 tournament_size: 0.07
