@@ -1,13 +1,20 @@
+import argparse
 from GA import GA
 
-def main():
-    '''Run the genetic algorithm'''
-    genetic_algorithm = GA("test14")
+def parse_args():
+    '''parse the run name'''
+    parser = argparse.ArgumentParser()
+    parser.add_argument("run_name", help="Name of the run")
+    args = parser.parse_args()
+    return args
 
-    for i in range(250):
-        genetic_algorithm.advance_generation()
-        genetic_algorithm.print_stats()
+
+def main(args):
+    '''Run the genetic algorithm'''
+    genetic_algorithm = GA(args.run_name)
+    genetic_algorithm.run()
     
     
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(args)

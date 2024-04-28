@@ -10,8 +10,10 @@ from horn_antenna import horn_antenna
 #import hpol_antenna
 
 class GA:
-    def __init__(self, run_name, settingsfile = 'settings.yaml'):
+    def __init__(self, run_name, settingsfile = 'settings.yaml', 
+                 initialization=None):
         self.run_name = run_name
+        self.custom_init = initialization
         self.initialize_settings(settingsfile)
         self.generation = 0
         self.population = []
@@ -52,27 +54,19 @@ class GA:
             valid_settings = False
             
         return valid_settings
-
-    
-    def make_antenna(self, type, genes=None):
-        '''Creates an antenna object'''
-        if type == 'horn':
-            return horn_antenna(genes)
-        else:
-            print('Invalid antenna type. Exiting.')
-            exit(1)
     
     
-    def initialize_population(self, initialization=None):
+    def initialize_population(self):
         '''Initializes the population of horn antennas'''
         antenna_type = self.settings['a_type']
-        if initialization is None:
+        if self.custom_init is None:
             for i in range(self.settings["npop"]):
                 self.population.append(self.make_antenna(antenna_type))
                 self.population[i].initialize()
         else:
-            print("Custom initialization not implemented yet. Exiting.")
-            exit(1)
+            # load in the population from a file
+            init_path = Path(f"initializations/{self.custom_init}.pkl")
+            self.load_population(init_path)
     
     
     def load_compairson(self):
@@ -89,23 +83,32 @@ class GA:
         '''Creates the run directory for the current run'''
         run_directory = Path("RunData") / self.run_name
         run_directory.mkdir(parents=True, exist_ok=True)
-        fitness_files = run_directory / "fitness_files"
-        fitness_files.mkdir(parents=True, exist_ok=True)
-        gene_files = run_directory / "gene_files"
-        gene_files.mkdir(parents=True, exist_ok=True)
+        if self.settings["save_all_files"]:
+            fitness_files = run_directory / "fitness_files"
+            fitness_files.mkdir(parents=True, exist_ok=True)
+            gene_files = run_directory / "gene_files"
+            gene_files.mkdir(parents=True, exist_ok=True)
         tracker_path = run_directory / "tracker.csv"
         with open(tracker_path, 'w') as file:
             file.write("Generation,Best Fitness,Best Individual Genes\n")
+    
+    
+    def make_antenna(self, type, genes=None):
+        '''Creates an antenna object'''
+        if type == 'horn':
+            return horn_antenna(genes)
+        else:
+            print('Invalid antenna type. Exiting.')
+            exit(1)
+    
     
     ### Selection ############################################################
     
     def tournament_selection(self):
         '''selects a parent using tournament selection'''
         
-        # Select tournamentsize of the population
-        
+        # Select tournamentsize percentage of the population
         tournament_count = int(self.settings["tournament_size"] * self.settings["npop"])
-        
         tournament = random.sample(self.population, tournament_count)
         
         # Find the best individual in the tournament
@@ -154,7 +157,8 @@ class GA:
     
     
     def selection(self, num_parents):
-        '''Selects parents from the population'''
+        '''Selects parents from the population based on
+        percentages'''
         parents = []
         
         for i in range(num_parents):
@@ -174,7 +178,7 @@ class GA:
         
         no_tournament = int(num_parents * self.settings["tournament_rate"])
         no_roulette = int(num_parents * self.settings["roulette_rate"])
-        no_rank = num_parents - no_tournament - no_roulette
+        no_rank = int(num_parents - no_tournament - no_roulette)
         
         parents = []
         parents.extend([self.tournament_selection() for i in range(no_tournament)])
@@ -191,6 +195,7 @@ class GA:
         antenna_type = self.settings['a_type']
         
         valid_children = False
+        attempt = 0
         while not valid_children:
             child1_genes = []
             child2_genes = []
@@ -210,6 +215,11 @@ class GA:
             # Check if children are valid
             valid_children = child1.check_genes() and child2.check_genes()
             
+            attempt += 1
+            if attempt > 100:
+                print("Crossover Failed")
+                return parent1, parent2
+            
         return child1, child2
                 
     
@@ -218,18 +228,19 @@ class GA:
         chosen_gene_index = random.randint(0, len(individual.genes) - 1)
         chosen_gene = individual.genes[chosen_gene_index]
         new_indiv = copy.deepcopy(individual)
-               
+            
+        
         valid_antenna = False
         while not valid_antenna:
             new_gene = random.gauss(chosen_gene, chosen_gene * self.settings["sigma"])
             new_indiv.genes[chosen_gene_index] = new_gene
-            valid_antenna = individual.check_genes()
-        
+            valid_antenna = new_indiv.check_genes()
+            
         return new_indiv
     
     
     def reproduction(individual):
-        '''Asecual Reproduction'''
+        '''Asexual Reproduction'''
         return individual
     
     
@@ -280,6 +291,12 @@ class GA:
         filepath = Path("RunData") / self.run_name / "tracker.csv"
         with open(filepath, 'a') as file:
             file.write(f"{self.generation},{self.best_fitness},{self.best_individual.genes}\n")
+            
+
+    def print_stats(self):
+        print(f"Generation: {self.generation}")
+        print(f"Best Fitness: {self.best_fitness}")
+        print(f"Best Individual: {self.best_individual.genes}")
     
     
     ### Generational Methods #################################################
@@ -297,13 +314,18 @@ class GA:
         mutation_no = int(self.settings["mutation_rate"] * self.settings["npop"])
         crossover_no = int(self.settings["crossover_rate"] * self.settings["npop"])
         reproduction_no = int(self.settings["reproduction_rate"] * self.settings["npop"])
+        
+        if crossover_no % 2 != 0:
+            crossover_no += 1
+        
         if mutation_no + crossover_no + reproduction_no < self.settings["npop"]:
             injection_no = self.settings["npop"] - mutation_no - crossover_no - reproduction_no
         else:
             injection_no = 0
             reproduction_no = self.settings["npop"] - mutation_no - crossover_no
             
-        return mutation_no, crossover_no, reproduction_no, injection_no
+        return [crossover_no, mutation_no, reproduction_no, injection_no]
+    
     
     ### SSGA Methods #########################################################
     
@@ -363,10 +385,10 @@ class GA:
             print("Invalid replacement method. Exiting.")
             exit(1)
     
+    
     ### Constraint Functions #################################################
     
-    
-    def test_diverse(self, new_indiv):
+    def test_diverse(self, new_indiv, new_population=None):
         '''Test if an individual is identical to any
         individuals currently in the population'''
         
@@ -374,14 +396,19 @@ class GA:
         for individual in self.population:
             if new_indiv.genes == individual.genes:
                 #print("Duplicate")
-                
                 unique = False
                 break
+        
+        if new_population is not None:
+            for individual in new_population:
+                if new_indiv.genes == individual.genes:
+                    unique = False
+                    break
         
         return unique
     
     
-    ### Main Loop ############################################################
+    ### Main Loop Functions #########################################################
     
     def advance_generation(self):
         '''Advances the generation of the population'''
@@ -390,9 +417,10 @@ class GA:
         if self.generation == 0:
             self.initialize_population()
             self.evaluate_population()
-            self.save_population()
-            self.write_population_genes()
-            self.write_population_fitness()
+            if self.settings["save_all_files"]:
+                self.save_population()
+                self.write_population_genes()
+                self.write_population_fitness()
             self.save_to_tracker()
             self.generation += 1
             return 0
@@ -438,24 +466,23 @@ class GA:
                 self.best_individual = new_indiv
             
         # Save the data
-        #self.save_population()
-        self.write_population_genes()
-        self.write_population_fitness()
+        if self.settings["save_all_files"]:
+            self.save_population()
+            self.write_population_genes()
+            self.write_population_fitness()
         self.save_to_tracker()
     
     
     def advance_generation_generational(self):
         new_population = []
-        
         operator_nos = self.get_operator_numbers()
         
-        print("Crossover")
-        # Crossover
+        print("Crossover") if self.settings["verbose"] else None
         parents = self.absolute_selection(operator_nos[0]*2)
-        for i in range(operator_nos[0]):  
-            print(i)
+        for i in range(int(operator_nos[0]/2)):  
             # Create children
             valid_children = False
+            attempt = 0
             while not valid_children:
                 parent1_index = random.randint(0, len(parents) - 1)
                 parent2_index = random.randint(0, len(parents) - 1)
@@ -465,71 +492,75 @@ class GA:
                 children = self.crossover(parents[parent1_index], parents[parent2_index])
                 
                 if self.settings["forced_diversity"]:
-                    valid_children = (self.test_diverse(children[0]) and
-                                      self.test_diverse(children[1]))
-                    
+                    valid_children = (self.test_diverse(children[0], new_population) and
+                                      self.test_diverse(children[1], new_population))
                 else:
                     valid_children = True
+                
+                attempt += 1
+                
+                if attempt > 100:
+                    print("Crossover Failed, adding rest to mutation") if self.settings["verbose"] else None
+                    operator_nos[1] += (operator_nos[0] - i) * 2
+                    break
             
-            # remove the parents from the list
-            parents.pop(parent1_index)
-            if parent1_index < parent2_index:
-                parents.pop(parent2_index - 1)
             else:
-                parents.pop(parent2_index)
+                # remove the parents from the list
+                parents.pop(parent1_index)
+                if parent1_index < parent2_index:
+                    parents.pop(parent2_index - 1)
+                else:
+                    parents.pop(parent2_index)
+                
+                # Add the children to the new population
+                new_population.extend(children)
+                continue
             
-            # Add the children to the new population
-            new_population.extend(children)
+            break
+            
 
-        print("Mutation")
-        # Mutation
+        print("Mutation") if self.settings["verbose"] else None
         parents = self.absolute_selection(operator_nos[1])
         for i in range(operator_nos[1]):
-            print(i)
+           # print(i)
             valid_individual = False
             while not valid_individual:
                 new_indiv = self.mutation(parents[i])
-
-                print("new_indiv", new_indiv.genes)
-                print("parent", parents[i].genes)
                 
                 if self.settings["forced_diversity"]:
-                    valid_individual = self.test_diverse(new_indiv)
+                    valid_individual = self.test_diverse(new_indiv, new_population)
                 else:
                     valid_individual = True
-                #rint("valid_individual", valid_individual)
-                #print("new_indiv", new_indiv.genes)
             
             new_population.append(new_indiv)
         
-        print("Reproduction")
-        # Reproduction
+        print("Reproduction") if self.settings["verbose"] else None
         parents = self.absolute_selection(operator_nos[2])
         for i in range(operator_nos[2]):
             new_population.append(copy.deepcopy(parents[i]))
         
-        print("Injection")
-        # Injection
+        print("Injection") if self.settings["verbose"] else None
         for i in range(operator_nos[3]):
             new_population.append(self.injection())
             
-        print("Evaluation")
-        # Evaluate the new population
+        print("Evaluation") if self.settings["verbose"] else None
         self.population = new_population
         self.evaluate_population()
         
         # Save the data
-        #self.save_population()
-        self.write_population_genes()
-        self.write_population_fitness()
+        if self.settings["save_all_files"]:
+            self.save_population()
+            self.write_population_genes()
+            self.write_population_fitness()
         self.save_to_tracker()
         
+    
+    def run(self):
+        '''Run the genetic algorithm'''
+        print("Running Genetic Algorithm...")
+        for i in range(self.settings["ngens"]):
+            self.advance_generation()
+            if self.settings["verbose"]:
+                self.print_stats()
+        print("Genetic Algorithm Complete")
                 
-        
-    def print_stats(self):
-        print(f"Generation: {self.generation}")
-        print(f"Best Fitness: {self.best_fitness}")
-        print(f"Best Individual: {self.best_individual.genes}")
-        
-        
-        
