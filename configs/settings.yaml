@@ -2,15 +2,21 @@
 # Path: settings.yaml
 
 # General
+a_type: "horn" # Antenna Type, Horn, Bicone, ...
 npop: 50
 maxgens: 100
 elitism: False
 steady_state: False
+replacement_method: "random" # Random, Tournament, Elite
+forced_diversity: False
+comparison_file: "comparison.csv"
 
 # Operators
 crossover_rate: 0.8
 mutation_rate: 0.1
 reproduction_rate: 0.1
+
+sigma: 0.06
 
 # Selection
 tournament_rate: 0.2

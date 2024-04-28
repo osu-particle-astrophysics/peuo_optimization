@@ -2,10 +2,11 @@ import random
 
 class horn_antenna:
     
-    def __init__(self, id, genes=None):
-        self.id = id
+    def __init__(self, genes=None):
+        self.id = ""
         self.genes = genes
         self.fitness = 0.0
+        self.true_fitness = 0.0
         self.MAX_S = 50.0
         self.MAX_H = 175.0
         self.MIN_H = 75.0
@@ -53,8 +54,8 @@ class horn_antenna:
             x_0 * y_0) / (trpzd_height + trpzd_length - y_0)
         
         # Run checks
-        if not(0 <= side_length <= self.MAX_S) or \
-            not(self.MIN_H <= height <= self.MAX_H):
+        if (not(0 <= side_length <= self.MAX_S) or 
+            not(self.MIN_H <= height <= self.MAX_H)):
             valid_design = False
         elif not(0 <= x_0 <= x_f):
             valid_design = False
@@ -68,9 +69,37 @@ class horn_antenna:
         # Check if trapezoids touch
         elif x_0 - trpzd_height < trpzd_intersect < x_0:
             valid_design = False
-        elif (4.0 / 30.0) * z_f > (beta * 100) or (7 * z_f) < (beta * 100) or beta > 2:
+        elif ((4.0 / 30.0) * z_f > (beta * 100) or 
+              (7 * z_f) < (beta * 100) or beta > 2):
             valid_design = False
         else:
             valid_design = True
 
         return valid_design
+    
+    
+    def evaluate_fitness(self, compairson):
+        '''Calculate the euclidean distance between the genes
+        of the horn antenna and the comparison genes'''
+        
+        euclidean_distance = 0.0
+        gene_count = len(self.genes)
+        for i in range(gene_count):
+            numerator = (self.genes[i] - compairson[i]) ** 2
+            denominator = (self.genes[i] + compairson[i]) ** 2
+            euclidean_distance += numerator / denominator
+            
+        normalized_distance = euclidean_distance / (2 * gene_count)
+        
+        self.fitness = 1.0 - normalized_distance
+    
+    
+    def set_id(self, id):
+        '''Sets the id of the antenna'''
+        self.id = id
+    
+    
+    def __str__(self) -> str:
+        '''Returns a string representation of the antenna's genes'''
+        return str(self.genes)
+        

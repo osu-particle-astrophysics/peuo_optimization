@@ -1,24 +1,33 @@
+import random
 import yaml
+import numpy as np
+import pickle
+import copy
 from pathlib import Path
 
 import horn_antenna
+#import bicone_antenna
+#import hpol_antenna
 
 class GA:
-    
     def __init__(self, run_name, settingsfile = 'settings.yaml'):
         self.run_name = run_name
         self.initialize_settings(settingsfile)
         self.generation = 0
         self.population = []
-        self.fitness = []
         self.best_individual = []
         self.best_fitness = 0.0
-        
+        self.comparison = np.array([])
+        self.load_compairson()
+    
+    
+    ### Initialization ########################################################
     
     def initialize_settings(self, settingsfile):
         '''Initializes the settings from the settings file'''
-        if Path("configs" / settingsfile).exists():
-            with open(settingsfile, 'r') as file:
+        settingspath = Path(f"configs/{settingsfile}")
+        if settingspath.exists():
+            with open(settingspath, 'r') as file:
                 settings = yaml.load(file, Loader=yaml.FullLoader)
         else:
             print('Settings file not found. Exiting.')
@@ -44,35 +53,368 @@ class GA:
         return valid_settings
 
     
+    def make_antenna(self, type, genes=None):
+        '''Creates an antenna object'''
+        if type == 'horn':
+            return horn_antenna(genes)
+        else:
+            print('Invalid antenna type. Exiting.')
+            exit(1)
+    
+    
     def initialize_population(self, initialization=None):
         '''Initializes the population of horn antennas'''
+        antenna_type = self.settings['a_type']
         if initialization is None:
             for i in range(self.settings.population_size):
-                self.population.append(horn_antenna())
+                self.population.append(self.make_antenna(antenna_type))
                 self.population[i].initialize()
         else:
             print("Custom initialization not implemented yet. Exiting.")
             exit(1)
-            
     
-    def evaluate_population(self):
-        pass
     
-    def selection(self):
-        pass
+    def load_compairson(self):
+        '''Loads the comparison genes from the comparison file'''
+        comparison_path = Path(f"comparisons/{self.settings['comparison_file']}")
+        if comparison_path.exists():
+            comparison = np.loadtxt(comparison_path)
+        else:
+            print('Comparison file not found. Exiting.')
+            exit(1)
+        
+        self.comparison = comparison
+        
+    
+    ### Selection ############################################################
+    
+    def tournament_selection(self):
+        '''selects a parent using tournament selection'''
+        
+        # Select tournamentsize of the population
+        tournament = random.sample(self.population, self.settings.tournament_size)
+        
+        # Find the best individual in the tournament
+        best_individual = tournament[0]
+        for individual in tournament:
+            if individual.fitness > best_individual.fitness:
+                best_individual = individual
+        
+        return best_individual
+    
+    
+    def roulette_selection(self):
+        '''Selects a parent using roulette selection'''
+        
+        # Calculate the total fitness of the population
+        total_fitness = sum([individual.fitness for individual in self.population])
+        
+        # Calculate the probability of selection for each individual
+        probabilities = [individual.fitness / total_fitness for individual in self.population]
+        
+        # Select an individual
+        selection = random.uniform(0, 1)
+        cumulative_probability = 0
+        for i in range(len(self.population)):
+            cumulative_probability += probabilities[i]
+            if cumulative_probability > selection:
+                return self.population[i]
+    
+    
+    def rank_selection(self):
+        '''Selects a parent using rank selection'''
+        
+        # Sort the population by fitness
+        sorted_population = sorted(self.population, key=lambda x: x.fitness)
+        
+        # Calculate the probability of selection for each individual
+        probabilities = [i / len(self.population) for i in range(1, len(self.population) + 1)]
+        
+        # Select an individual
+        selection = random.uniform(0, 1)
+        cumulative_probability = 0
+        for i in range(len(self.population)):
+            cumulative_probability += probabilities[i]
+            if cumulative_probability > selection:
+                return sorted_population[i]
+    
+    
+    def selection(self, num_parents):
+        '''Selects parents from the population'''
+        parents = []
+        
+        for i in range(num_parents):
+            selection = random.uniform(0, 1)
+            if selection < self.settings.tournament_rate:
+                parents.append(self.tournament_selection())
+            elif selection < self.settings.tournament_rate + self.settings.roulette_rate:
+                parents.append(self.roulette_selection())
+            else:
+                parents.append(self.rank_selection())
+        
+        return parents
+        
+    
+    def absolute_selection(self, num_parents):
+        '''Selects exactly the rate from each selection method'''
+        
+        no_tournament = int(num_parents * self.settings.tournament_rate)
+        no_roulette = int(num_parents * self.settings.roulette_rate)
+        no_rank = num_parents - no_tournament - no_roulette
+        
+        parents = []
+        parents.extend([self.tournament_selection() for i in range(no_tournament)])
+        parents.extend([self.roulette_selection() for i in range(no_roulette)])
+        parents.extend([self.rank_selection() for i in range(no_rank)])
+        
+        return parents
+    
+    
+    ### Operators ############################################################
     
     def crossover(self, parent1, parent2):
-        pass
+        '''Crossover two parents to create two children'''
+        antenna_type = self.settings['a_type']
+        
+        valid_children = False
+        while not valid_children:
+            child1_genes = []
+            child2_genes = []
+            
+            # Crossover genes
+            for gene in parent1.genes:
+                gene_1 = parent1.genes[gene]
+                gene_2 = parent2.genes[gene]
+                
+                coinflip = random.randint(0, 1)
+                child1_genes.append(gene_1 if coinflip == 0 else gene_2)
+                child2_genes.append(gene_2 if coinflip == 0 else gene_1)
+                
+            child1 = self.make_antenna(antenna_type, child1_genes)
+            child2 = self.make_antenna(antenna_type, child2_genes)
+            
+            # Check if children are valid
+            valid_children = child1.check_genes() and child2.check_genes()
+            
+        return child1, child2
+                
     
     def mutation(self, individual):
-        pass
-    
-    
-    def run(self):
-        self.initialize_population()
-        self.evaluate_population()
-        self.selection()
-        self.crossover()
-        self.mutation()
+        '''Mutate a randomly selected gene across a gaussian distribution'''
+        chosen_gene_index = random.randint(0, len(individual.genes) - 1)
+        chosen_gene = individual.genes[chosen_gene_index]
         
-        return self.best_individual, self.best_fitness
+        valid_antenna = False
+        while not valid_antenna:
+            new_gene = random.gauss(chosen_gene, chosen_gene * self.settings.sigma)
+            individual.genes[chosen_gene] = new_gene
+            valid_antenna = individual.check_genes()
+        
+        return individual
+    
+    
+    def reproduction(individual):
+        '''Asecual Reproduction'''
+        return individual
+    
+    
+    def injection(self):
+        '''Injects new individuals into the population'''
+
+        individual = self.make_antenna(self.settings['a_type'])
+        individual.initialize()
+        
+        return individual
+    
+    
+    ### Write/ReadFunctions ##################################################
+    
+    def write_population_genes(self):
+        '''Write the gened of the population to the run directory'''
+        filepath = Path("RunData") / self.run_name / f"{self.generation}_genes.csv"
+        with open (filepath, "w") as file:
+            for individual in self.population:
+                for gene in individual.genes[:-1]:
+                    file.write(f"{gene},")
+                file.write(f"{individual.genes[-1]}\n")
+    
+    
+    def write_population_fitness(self):
+        '''Write the fitness of the population to the run directory'''
+        filepath = Path("RunData") / self.run_name / f"{self.generation}_fitness.csv"
+        with open (filepath, "w") as file:
+            for individual in self.population:
+                file.write(f"{individual.fitness}\n")
+    
+    
+    def save_population(self):
+        '''save the antenna objects to a pickle file'''
+        filepath = Path("RunData") / self.run_name / f"{self.generation}_population.pkl"
+        with open(filepath, 'wb') as file:
+            pickle.dump(self.population, file)
+            
+            
+    def load_population(self, filepath):
+        '''Load the population from a pickle file'''
+        with open(filepath, 'rb') as file:
+            self.population = pickle.load(file)
+            
+            
+    def save_to_tracker(self):
+        '''append the current best to the tracker file'''
+        filepath = Path("RunData") / self.run_name / "tracker.csv"
+        with open(filepath, 'a') as file:
+            file.write(f"{self.generation},{self.best_fitness},{self.best_individual.id}\n")
+    
+    
+    ### Generational Methods #################################################
+    
+    def evaluate_population(self):
+        ''' Evaluate the fitness of the entire population'''
+        for individual in self.population:
+            individual.evaluate_fitness(self.comparison)
+    
+    
+    
+    ### SSGA Methods #########################################################
+    
+    def choose_operator(self):
+        '''choose an operator from the operator set of 
+        REPRODUCTION, CROSSOVER, MUTATION, INJECTION'''
+        # choose a random number from 0 to 1
+        choice = random.uniform(0, 1)
+        
+        limit = self.settings["crossover_rate"]
+        if choice <= limit:
+            return "crossover"
+        
+        limit += self.settings["mutation_rate"]
+        if choice <= limit:
+            return "mutation"
+        
+        limit += self.settings["reproduction_rate"]
+        if choice <= limit:
+            return "reproduction"
+        
+        return "injection"    
+
+    
+    def create_individual(self, operator, parents):
+        '''Create an individual from the operator and parents'''
+        
+        if operator == "crossover":
+            new_indiv = self.crossover(parents[0], parents[1])
+        elif operator == "mutation":
+            new_indiv = self.mutation(parents[0])
+        elif operator == "injection":
+            new_indiv = self.injection()
+        else:
+            new_indiv = parents[0]
+        
+        if type(new_indiv) in [list, tuple]:
+            new_indiv = copy.deepcopy(new_indiv[0])
+        else:
+            new_indiv = copy.deepcopy(new_indiv)
+
+        return new_indiv
+    
+    
+    def get_num_parents(operator):
+        '''get the number of parents for a SSGA operator'''
+        if operator == "crossover":
+            return 2
+        return 1
+    
+    
+    def replace_individual(self, new_indiv):
+        if self.settings["replacement_method"] == "random":
+            index = random.randint(0, len(self.population) - 1)
+            self.population[index] = new_indiv
+        else:
+            print("Invalid replacement method. Exiting.")
+            exit(1)
+    
+    ### Constraint Functions #################################################
+    
+    
+    def test_diverse(self, new_indiv):
+        '''Test if an individual is identical to any
+        individuals currently in the population'''
+        
+        unique = True
+        for individual in self.population:
+            if new_indiv.genes == individual.genes:
+                unique = False
+                break
+        
+        return unique
+    
+    
+    ### Main Loop ############################################################
+    
+    def advance_generation(self):
+        '''Advances the generation of the population'''
+        
+        # check if initial generation
+        if self.generation == 0:
+            self.initialize_population()
+            self.evaluate_population()
+            self.save_population()
+            self.write_population_genes()
+            self.write_population_fitness()
+            self.save_to_tracker()
+            self.generation += 1
+            return 0
+
+        # Advance the generation
+        if self.settings["steady_state"]:
+            self.advance_generation_steady_state()
+        else:
+            self.advance_generation_generational()
+        self.generation += 1
+        return 0
+    
+    
+    def advance_generation_steady_state(self):
+        '''Advances the state of the GA in a steady state manner,
+        creating new individuals one by one'''
+        
+        for i in range(self.settings["npop"]):
+            
+            # Create a new antenna
+            valid_individual = False
+            while valid_individual == False:
+                # Create a new individual
+                
+                operator = self.choose_operator()
+                num_parents = self.get_num_parents(operator)
+                parents = self.selection(num_parents)
+                
+                new_indiv = self.create_individual(operator, parents)
+                
+                # Check if the antenna is unique if required
+                if self.settings["forced_diversity"] == True:
+                    valid_individual = self.test_diverse(new_indiv)
+                else:
+                    valid_individual = True
+                
+            # Test Fitness and replace an individual
+            new_indiv.evaluate_fitness(self.comparison)
+            self.replace_individual(new_indiv)
+            
+        # Save the data
+        self.save_population()
+        self.write_population_genes()
+        self.write_population_fitness()
+        self.save_to_tracker()
+    
+    
+    def advance_generation_generational(self):
+        pass
+        
+        
+        
+        
+        
+        
+        
