@@ -89,6 +89,10 @@ class GA:
         '''Creates the run directory for the current run'''
         run_directory = Path("RunData") / self.run_name
         run_directory.mkdir(parents=True, exist_ok=True)
+        fitness_files = run_directory / "fitness_files"
+        fitness_files.mkdir(parents=True, exist_ok=True)
+        gene_files = run_directory / "gene_files"
+        gene_files.mkdir(parents=True, exist_ok=True)
         tracker_path = run_directory / "tracker.csv"
         with open(tracker_path, 'w') as file:
             file.write("Generation,Best Fitness,Best Individual Genes\n")
@@ -213,14 +217,15 @@ class GA:
         '''Mutate a randomly selected gene across a gaussian distribution'''
         chosen_gene_index = random.randint(0, len(individual.genes) - 1)
         chosen_gene = individual.genes[chosen_gene_index]
-        
+        new_indiv = copy.deepcopy(individual)
+               
         valid_antenna = False
         while not valid_antenna:
             new_gene = random.gauss(chosen_gene, chosen_gene * self.settings["sigma"])
-            individual.genes[chosen_gene_index] = new_gene
+            new_indiv.genes[chosen_gene_index] = new_gene
             valid_antenna = individual.check_genes()
         
-        return individual
+        return new_indiv
     
     
     def reproduction(individual):
@@ -241,7 +246,7 @@ class GA:
     
     def write_population_genes(self):
         '''Write the gened of the population to the run directory'''
-        filepath = Path("RunData") / self.run_name / f"{self.generation}_genes.csv"
+        filepath = Path("RunData") / self.run_name / "gene_files" / f"{self.generation}_genes.csv"
         with open (filepath, "w") as file:
             for individual in self.population:
                 for gene in individual.genes[:-1]:
@@ -251,7 +256,7 @@ class GA:
     
     def write_population_fitness(self):
         '''Write the fitness of the population to the run directory'''
-        filepath = Path("RunData") / self.run_name / f"{self.generation}_fitness.csv"
+        filepath = Path("RunData") / self.run_name / "fitness_files" / f"{self.generation}_fitness.csv"
         with open (filepath, "w") as file:
             for individual in self.population:
                 file.write(f"{individual.fitness}\n")
@@ -288,6 +293,17 @@ class GA:
                 self.best_individual = individual
     
     
+    def get_operator_numbers(self):
+        mutation_no = int(self.settings["mutation_rate"] * self.settings["npop"])
+        crossover_no = int(self.settings["crossover_rate"] * self.settings["npop"])
+        reproduction_no = int(self.settings["reproduction_rate"] * self.settings["npop"])
+        if mutation_no + crossover_no + reproduction_no < self.settings["npop"]:
+            injection_no = self.settings["npop"] - mutation_no - crossover_no - reproduction_no
+        else:
+            injection_no = 0
+            reproduction_no = self.settings["npop"] - mutation_no - crossover_no
+            
+        return mutation_no, crossover_no, reproduction_no, injection_no
     
     ### SSGA Methods #########################################################
     
@@ -357,6 +373,8 @@ class GA:
         unique = True
         for individual in self.population:
             if new_indiv.genes == individual.genes:
+                #print("Duplicate")
+                
                 unique = False
                 break
         
@@ -396,7 +414,7 @@ class GA:
             
             # Create a new antenna
             valid_individual = False
-            while valid_individual == False:
+            while not valid_individual:
                 # Create a new individual
                 
                 operator = self.choose_operator()
@@ -420,15 +438,93 @@ class GA:
                 self.best_individual = new_indiv
             
         # Save the data
-        self.save_population()
+        #self.save_population()
         self.write_population_genes()
         self.write_population_fitness()
         self.save_to_tracker()
     
     
     def advance_generation_generational(self):
-        pass
+        new_population = []
         
+        operator_nos = self.get_operator_numbers()
+        
+        print("Crossover")
+        # Crossover
+        parents = self.absolute_selection(operator_nos[0]*2)
+        for i in range(operator_nos[0]):  
+            print(i)
+            # Create children
+            valid_children = False
+            while not valid_children:
+                parent1_index = random.randint(0, len(parents) - 1)
+                parent2_index = random.randint(0, len(parents) - 1)
+                while parents[parent1_index].genes == parents[parent2_index].genes:
+                    parent2_index = random.randint(0, len(parents) - 1)
+                
+                children = self.crossover(parents[parent1_index], parents[parent2_index])
+                
+                if self.settings["forced_diversity"]:
+                    valid_children = (self.test_diverse(children[0]) and
+                                      self.test_diverse(children[1]))
+                    
+                else:
+                    valid_children = True
+            
+            # remove the parents from the list
+            parents.pop(parent1_index)
+            if parent1_index < parent2_index:
+                parents.pop(parent2_index - 1)
+            else:
+                parents.pop(parent2_index)
+            
+            # Add the children to the new population
+            new_population.extend(children)
+
+        print("Mutation")
+        # Mutation
+        parents = self.absolute_selection(operator_nos[1])
+        for i in range(operator_nos[1]):
+            print(i)
+            valid_individual = False
+            while not valid_individual:
+                new_indiv = self.mutation(parents[i])
+
+                print("new_indiv", new_indiv.genes)
+                print("parent", parents[i].genes)
+                
+                if self.settings["forced_diversity"]:
+                    valid_individual = self.test_diverse(new_indiv)
+                else:
+                    valid_individual = True
+                #rint("valid_individual", valid_individual)
+                #print("new_indiv", new_indiv.genes)
+            
+            new_population.append(new_indiv)
+        
+        print("Reproduction")
+        # Reproduction
+        parents = self.absolute_selection(operator_nos[2])
+        for i in range(operator_nos[2]):
+            new_population.append(copy.deepcopy(parents[i]))
+        
+        print("Injection")
+        # Injection
+        for i in range(operator_nos[3]):
+            new_population.append(self.injection())
+            
+        print("Evaluation")
+        # Evaluate the new population
+        self.population = new_population
+        self.evaluate_population()
+        
+        # Save the data
+        #self.save_population()
+        self.write_population_genes()
+        self.write_population_fitness()
+        self.save_to_tracker()
+        
+                
         
     def print_stats(self):
         print(f"Generation: {self.generation}")

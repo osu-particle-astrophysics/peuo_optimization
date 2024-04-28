@@ -6,7 +6,7 @@ a_type: "horn" # Antenna Type, Horn, Bicone, ...
 npop: 250
 maxgens: 100
 elitism: False
-steady_state: True
+steady_state: False
 replacement_method: "random" # Random, Tournament, Elite
 forced_diversity: True
 comparison_file: "comparison1.txt"

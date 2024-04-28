@@ -2,7 +2,7 @@ from GA import GA
 
 def main():
     '''Run the genetic algorithm'''
-    genetic_algorithm = GA("test10")
+    genetic_algorithm = GA("test14")
 
     for i in range(250):
         genetic_algorithm.advance_generation()
