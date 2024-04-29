@@ -93,6 +93,8 @@ class horn_antenna:
             
         normalized_distance = euclidean_distance / (2 * gene_count)
         
+        normalized_distance = normalized_distance ** 0.5
+        
         self.fitness = 1.0 - normalized_distance
     
     

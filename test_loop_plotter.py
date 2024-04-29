@@ -5,13 +5,13 @@ from pathlib import Path
 
 def main():
     '''Plot the 10 trials of genga and ssga'''
-    #run_names = ["ssga_run", "genga_run", "ssga_no_fd_run", "genga_run_only_t", "genga_t_no_fd_run", "genga_no_fd_run"]
-    #plot_names = ["SSGA T FD", "GENGA TTR FD", "SSGA T", "GENGA T FD", "GENGA T", "GENGA TTR"]
+
+    #plot_names = ["GENGA TTR", "GENGA TTR FD", "GENGA T", "GENGA T FD", "SSGA T", "SSGA T FD"]
+    #run_names = ["genga_no_fd_run", "genga_run", "genga_t_no_fd_run", "genga_run_only_t", "ssga_no_fd_run", "ssga_run"]
     
-    # Reorganizing
+    run_names = ["new_genga_trr", "new_genga_trr__fd", "new_genga_t", "new_genga_t_fd", "new_ssga_t", "new_ssga_t_fd"]
     plot_names = ["GENGA TTR", "GENGA TTR FD", "GENGA T", "GENGA T FD", "SSGA T", "SSGA T FD"]
-    run_names = ["genga_no_fd_run", "genga_run", "genga_t_no_fd_run", "genga_run_only_t", "ssga_no_fd_run", "ssga_run"]
-    plot_averages(run_names, plot_names, 99)
+    plot_averages(run_names, plot_names, 100)
 
 
 def plot_all_lines():
@@ -73,14 +73,16 @@ def plot_averages(run_name_list, plot_name_list, count):
     
     plt.title("Comparison of PUEO Genetic Algorithms", fontsize=20)
     
-    plt.legend(handles=color_lines, fontsize=12)
+    plt.legend(handles=color_lines, fontsize=11)
     
-    save_name = "all_comparisons"
+    plt.ylim(0.75, 1.0)
     
-    plt.text(100, 0.976, "T = Only Tounrament Selection\n"
+    save_name = "all_comparisons_new"
+    
+    plt.text(100, 0.86, "T = Only Tournament Selection\n"
                    "TRR = All Selection Methods\n"
                    "FD = Forced Diversity", zorder=10, color='black',
-                     fontsize=10, ha='right', va='top', bbox=dict(facecolor='white', alpha=0.8))
+                     fontsize=9, ha='right', va='top', bbox=dict(facecolor='white', alpha=0.8))
     
     
     plt.savefig(f"{save_name}.png")
