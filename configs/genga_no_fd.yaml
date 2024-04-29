@@ -7,9 +7,9 @@ comparison_file: "comparison1.txt"
 npop: 100
 ngens: 100
 elitism: False
-steady_state: True
+steady_state: False
 replacement_method: "random" # Random, Tournament, Elite
-forced_diversity: True
+forced_diversity: False
 verbose: False
 save_all_files: False
 
@@ -21,8 +21,8 @@ reproduction_rate: 0.0
 sigma: 0.06
 
 # Selection
-tournament_rate: 1.0
-rank_rate: 0.0
-roulette_rate: 0.0
+tournament_rate: 0.2
+rank_rate: 0.6
+roulette_rate: 0.2
 
 tournament_size: 0.07

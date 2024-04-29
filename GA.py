@@ -10,7 +10,7 @@ from horn_antenna import horn_antenna
 #import hpol_antenna
 
 class GA:
-    def __init__(self, run_name, settingsfile = 'settings.yaml', 
+    def __init__(self, run_name, settingsfile='settings.yaml', 
                  initialization=None):
         self.run_name = run_name
         self.custom_init = initialization
@@ -195,7 +195,7 @@ class GA:
         antenna_type = self.settings['a_type']
         
         valid_children = False
-        attempt = 0
+        cross_attempt = 0
         while not valid_children:
             child1_genes = []
             child2_genes = []
@@ -215,9 +215,9 @@ class GA:
             # Check if children are valid
             valid_children = child1.check_genes() and child2.check_genes()
             
-            attempt += 1
-            if attempt > 100:
-                print("Crossover Failed")
+            cross_attempt += 1
+            if cross_attempt > 100:
+                print("Crossover Failed") if self.settings["verbose"] else None
                 return parent1, parent2
             
         return child1, child2
@@ -273,9 +273,10 @@ class GA:
                 file.write(f"{individual.fitness}\n")
     
     
-    def save_population(self):
+    def save_population(self, filepath=None):
         '''save the antenna objects to a pickle file'''
-        filepath = Path("RunData") / self.run_name / f"{self.generation}_population.pkl"
+        if filepath is None:
+            filepath = Path("RunData") / self.run_name / f"{self.generation}_population.pkl"
         with open(filepath, 'wb') as file:
             pickle.dump(self.population, file)
             
@@ -482,24 +483,30 @@ class GA:
         for i in range(int(operator_nos[0]/2)):  
             # Create children
             valid_children = False
-            attempt = 0
+            diverse_attempt = 0
+            
             while not valid_children:
                 parent1_index = random.randint(0, len(parents) - 1)
                 parent2_index = random.randint(0, len(parents) - 1)
+                parent_attempt = 0
                 while parents[parent1_index].genes == parents[parent2_index].genes:
                     parent2_index = random.randint(0, len(parents) - 1)
-                
+                    parent_attempt += 1
+                    if parent_attempt > 100:
+                        diverse_attempt += 100
+                        break
+
                 children = self.crossover(parents[parent1_index], parents[parent2_index])
                 
                 if self.settings["forced_diversity"]:
                     valid_children = (self.test_diverse(children[0], new_population) and
-                                      self.test_diverse(children[1], new_population))
+                                    self.test_diverse(children[1], new_population))
                 else:
                     valid_children = True
                 
-                attempt += 1
+                diverse_attempt += 1
                 
-                if attempt > 100:
+                if diverse_attempt > 100:
                     print("Crossover Failed, adding rest to mutation") if self.settings["verbose"] else None
                     operator_nos[1] += (operator_nos[0] - i) * 2
                     break
