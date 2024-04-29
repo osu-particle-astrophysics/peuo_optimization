@@ -75,7 +75,7 @@ def plot_averages(run_name_list, plot_name_list, count):
     
     plt.legend(handles=color_lines, fontsize=11)
     
-    plt.ylim(0.75, 1.0)
+    plt.ylim(0.75, 1.005)
     
     save_name = "all_comparisons_new"
     
